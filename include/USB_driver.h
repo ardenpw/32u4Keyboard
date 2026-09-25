@@ -56,7 +56,8 @@ typedef enum {
     /* Enable an endpoint interrupt after the endpoint returns a STALL handshake to the host (STALLEDI). */
     CFG_STALLEDE = 2,
     /* Enable an endpoint interrupt when the IN FIFO/bank is ready to accept the next packet from firmware (TXINI). */
-    CFG_TXINE = 1
+    CFG_TXINE = 1,
+    CFG_NONE = 0
 } UEIENX_CFG_ENUM;
 
 typedef enum {
@@ -82,52 +83,29 @@ typedef enum {
     SM_EXTENDSTANDBY = (6 << 1)
 } SM_ENUM;
 
+typedef enum {
+    /*
+    Clearing triggers transmission of what is in currently selected ```in``` bank
+    - [send D->H (Data/Status)], Cleared: After writing all payload bytes to UEDATX (or immediately, if sending a ZLP)
+    */
+    TYPE_TXINI,
+    /*
+    Clearing releases current ```out``` bank back to hardware, allows for new ```out``` packet
+    - [send H->D (Data/Status)], Cleared: After reading all payload bytes from UEDATX
+    */
+    TYPE_RXOUTI = 2,
+    /*
+    Clearing releases the ```setup-RXed``` state and halts stalling traffic on that pipe to proceed to the data/status stage
+    - [send H->D (setup)], Cleared: After reading all 8 setup bytes from UEDATX
+    */
+    TYPE_RXSTPI = 3
+} USB_HS_TYPE;
+
 void USB_interface_init(void);
 //void USB_interface_powerOn(VBUS_ENUM VBUS_E);
-static void USB_interface_EPConfigure(uint8_t epNum, EPDIR_ENUM EPDIR_E, EPTYPE_ENUM EPTYPE_E, uint16_t epSizeB, EPBK_ENUM EPBK_E, UEIENX_CFG_ENUM CFG_E) {
-    epNum = epNum > MAXEP ? MAXEP : epNum;
-    UENUM = epNum;
-    while ((UENUM & 0x07) != epNum);
+void USB_interface_EPConfigure(uint8_t epNum, EPDIR_ENUM EPDIR_E, EPTYPE_ENUM EPTYPE_E, uint16_t epSizeB, EPBK_ENUM EPBK_E, UEIENX_CFG_ENUM CFG_E); 
 
-    //USB_interface_EPReset(epNum);
-
-    if (epNum == 0) {
-        epSizeB = epSizeB > 64 ? 64 : epSizeB;
-    }
-    // only allowed to have one ep that is 256B
-
-    if (epSizeB <= 8) epSizeB = 0;
-    else if (epSizeB <= 16) epSizeB = 1;
-    else if (epSizeB <= 32) epSizeB = 2;
-    else if (epSizeB <= 64) epSizeB = 3;
-    else if (epSizeB <= 128) epSizeB = 4;
-    else epSizeB = 5;
-
-    UECONX |= (1 << EPEN);
-
-    UECFG0X = ((EPTYPE_E << EPTYPE0) | (EPDIR_E << EPDIR));
-    UECFG1X = ((epSizeB << EPSIZE0) | (EPBK_E << EPBK0) | (1 << ALLOC)); 
-
-    /*
-    if (!(UESTA0X & (1 << CFGOK))) {
-        cli();
-        PORTB &= ~(1 << PB0);
-        return;
-    }
-    */
-
-    while ((UESTA0X & (1 << CFGOK)) == 0) {
-        PORTB &= ~(1 << 0);
-    }
-    PORTB |= (1 << 0);
-
-    UERST = (1 << epNum);
-    UERST = 0;
-
-    UEIENX = CFG_E;
-}
-
-static uint8_t USB_interface_configStatus(USB_FUNCTION_RETURN_ENUM USBFUNC_E) {
+static inline uint8_t USB_interface_configStatus(USB_FUNCTION_RETURN_ENUM USBFUNC_E) {
     static uint8_t status = 0;
     switch (USBFUNC_E) {
         case 0:
@@ -142,6 +120,16 @@ static uint8_t USB_interface_configStatus(USB_FUNCTION_RETURN_ENUM USBFUNC_E) {
     return status;
 }
 
+static inline void USB_interface_handshakeSet(USB_HS_TYPE TYPE_E) {
+    switch (TYPE_E) {
+        case 0: case 2: case 3:
+            UEINTX &= ~(1 << TYPE_E);
+            break;
+        default:
+            return;
+    }
+}
 
+//static inline void USB_interface_setAddress()
 
 #endif // USB_driver_h
