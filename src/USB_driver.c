@@ -85,7 +85,7 @@ ISR(USB_GEN_vect) {
         // clear resume information?
     }
     if (flags & (1 << EORSTI)) {
-        USB_interface_EPConfigure(0, EPDIR_OUT, EPTYPE_CONTROL, 64, EPBKTYPE_ONEBANK, (CFG_RXSTPE));
+        USB_interface_EPConfigure(0, EPDIR_OUT, EPTYPE_CONTROL, UD_EP0_SIZE, EPBKTYPE_ONEBANK, (CFG_RXSTPE));
         USB_interface_configStatus(USBFUNC_SETZERO);
         //PORTD &= ~(1 << 5);
     }
@@ -199,8 +199,7 @@ ISR(USB_COM_vect) {
                 if (bRequest == SET_CONFIGURATION) {
                     if (bmRequestType == 0 && USB_interface_configStatus(USBFUNC_RETURN) == 0) {
                         USB_interface_handshakeSet(TYPE_TXINI);
-                        USB_interface_EPConfigure(1, EPDIR_IN, EPTYPE_INTERRUPT, 64, EPBKTYPE_ONEBANK, CFG_NONE);
-                        USB_interface_EPConfigure(2, EPDIR_OUT, EPTYPE_INTERRUPT, 64, EPBKTYPE_ONEBANK, CFG_NONE);
+                        USB_interface_EPConfigure(1, EPDIR_IN, EPTYPE_INTERRUPT, UD_EP0_SIZE, EPBKTYPE_ONEBANK, CFG_NONE);
                         
                         /*
                         UERST = 0x7E; // 0b01111110
