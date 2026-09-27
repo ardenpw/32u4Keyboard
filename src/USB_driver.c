@@ -1,177 +1,75 @@
 #include "USB_driver.h"
-#include "USB.h"
-#include "udDescriptors.h"
-#include <avr/io.h>
-#include <avr/interrupt.h>
 
-static void USB_interface_connect(USB_DETACH_ENUM USB_DETACH_E) {
-    if (USB_DETACH_E) {
-        UDCON &= ~(1 << DETACH);
-    } else {
-        UDCON |= (1 << DETACH);
-    }
-
-    /*
-    while ((UDCON & (1 << DETACH)) == USB_DETACH_E) {
-        PORTB &= ~(1 << 0);
-    }
-    PORTB |= (1 << 0);
-    */
-}
-
-static void USB_interface_clockManage(USB_CLK_ENUM USBCLK_E) {
-    if (USBCLK_E) {
-        USBCON &= ~(1 << FRZCLK);
-    } else {
-        USBCON |= (1 << FRZCLK);
-    }
-
-    /*
-    while ((USBCON & (1 << FRZCLK)) == USBCLK_E) {
-        PORTB &= ~(1 << 0);
-    }
-    PORTB |= (1 << 0);
-    */
-}
-
-static void USB_interface_EPReset(uint8_t epNum) {
-    // or interface shutdown. depending on how you look at it.
-    epNum = epNum > MAXEP ? MAXEP : epNum;
-    //epNum = 0 cant be reset
-    UENUM = epNum;
-    //while ((UENUM & 0x07) != epNum);
-
-    if (epNum != 0) { UECONX &= ~(1 << EPEN); }
-    UERST |= (1 << epNum);
-    //while (!(UERST & (1 << epNum)));
-    UERST &= ~(1 << epNum);
-    UECFG1X &= ~(1 << ALLOC);
-}
-
-static void PLL_configure(PLLCFG_ENUM PLL_E) {
-    if (PLL_E & PLL_CPUEXT) {
-        CLKSEL0 |= (1 << EXTE);
-        while ((CLKSTA & (1 << EXTON)) == 0) {
-            PORTB &= ~(1 << 0);
-        }
-        PORTB |= (1 << 0);
-        CLKSEL0 |= (1 << CLKS);
-        CLKSEL1 &= ~(0xf << EXCKSEL0);
-    }
-
-    if (PLL_E & PLL_START) {
-        PLLFRQ = 0b01001010;
-        PLLCSR = 0b00010010;
-
-        while ((PLLCSR & (1 << PLOCK)) == 0) {
-            PORTB &= ~(1 << 0); 
-        }
-        PORTB |= (1 << 0);
-    } 
-    else {
-        PLLFRQ = 0;
-        PLLCSR &= ~(0x12);
-    }
-}
-
-static void CPU_sleepMode(SM_ENUM SM_E) {
-    if (SM_E > 1) {
-        SMCR &= ~0xE;
-        SMCR |= (SM_E & 0xE);
-    }
-
-    if (SM_E & SM_SLEEPENABLE) {
-        SMCR |= 1;
-    }
-    else {
-        SMCR &= ~1;
-    }
-}
-
-void USB_interface_powerOn(VBUS_ENUM VBUS_E) {
-    cli();
-    
-    // begin misc config.
-    // debug pd5
-    DDRD |= (1 << 5);
-    PORTD |= (1 << 5);
-    
-    DDRB |= (1 << 0);
-    PORTB |= (1 << 0);
-    
-    // pll stuff
-    PLL_configure(PLL_START); //PLL_CPUEXT
-    
-    // begin usb
-    UHWCON |= (1 << UVREGE);
-
-    //UERST = 127;
-    // this could cuase probemds 
-    for (uint8_t i = 0; i < MAXEP; i++) {
-        USB_interface_EPReset(i);
-    }
-
-    USB_interface_connect(USB_DETACH);  
-
-    
-    if (VBUS_E) {
-        while ((USBSTA & (1 << VBUS)) == 0) {
-            //PORTB &= ~(1 << 0);
-        }
-        PORTB |= (1 << 0);
-    }
-    
-    
-    USBCON = 0b10110000;
-    UDCON = 0b00000001;
-    //UDADDR = 0;
-    
-
-    //USB_interface_EPConfigure(0, EPDIR_OUT, EPTYPE_CONTROL, 64, EPBKTYPE_ONEBANK, CFG_RXSTPE);
-
-    USB_interface_clockManage(USBCLK_UNFREEZE);
-
-    UDIEN = 0b01001101;
-
-    USB_interface_connect(USB_CONNECT);
-    
-    //PORTD &= ~(1 << 5);
-
-    sei();
-}
-
-void USB_interface_EPConfigure(uint8_t epNum, EPDIR_ENUM EPDIR_E, EPTYPE_ENUM EPTYPE_E, uint16_t epSize, EPBK_ENUM EPBK_E, UEIENX_CFG_ENUM CFG_E) {
-    // Deconfiugre then reconfigure at epNum with params
+void USB_interface_EPConfigure(uint8_t epNum, EPDIR_ENUM EPDIR_E, EPTYPE_ENUM EPTYPE_E, uint16_t epSizeB, EPBK_ENUM EPBK_E, UEIENX_CFG_ENUM CFG_E) {
     epNum = epNum > MAXEP ? MAXEP : epNum;
     UENUM = epNum;
     while ((UENUM & 0x07) != epNum);
 
-    USB_interface_EPReset(epNum);
+    //USB_interface_EPReset(epNum);
 
     if (epNum == 0) {
-        epSize = epSize > 64 ? 64 : epSize;
+        epSizeB = epSizeB > 64 ? 64 : epSizeB;
     }
     // only allowed to have one ep that is 256B
 
-    if (epSize <= 8) epSize = 0;
-    else if (epSize <= 16) epSize = 1;
-    else if (epSize <= 32) epSize = 2;
-    else if (epSize <= 64) epSize = 3;
-    else if ((USB_interface_configStatus(USBFUNC_RETURN) & 0x1) == 0) {
-        if (epSize <= 128) epSize = 4;
-        else epSize = 5;
-    }
-    else epSize = 3;
+    if (epSizeB <= 8) epSizeB = 0;
+    else if (epSizeB <= 16) epSizeB = 1;
+    else if (epSizeB <= 32) epSizeB = 2;
+    else if (epSizeB <= 64) epSizeB = 3;
+    else if (epSizeB <= 128) epSizeB = 4;
+    else epSizeB = 5;
 
     UECONX |= (1 << EPEN);
 
     UECFG0X = ((EPTYPE_E << EPTYPE0) | (EPDIR_E << EPDIR));
-    UECFG1X = ((epSize << EPSIZE0) | (EPBK_E << EPBK0) | (1 << ALLOC)); 
+    UECFG1X = ((epSizeB << EPSIZE0) | (EPBK_E << EPBK0) | (1 << ALLOC)); 
+
+    /*
+    if (!(UESTA0X & (1 << CFGOK))) {
+        cli();
+        PORTB &= ~(1 << PB0);
+        return;
+    }
+    */
 
     while ((UESTA0X & (1 << CFGOK)) == 0) {
         PORTB &= ~(1 << 0);
     }
     PORTB |= (1 << 0);
+
+    UERST = (1 << epNum);
+    UERST = 0;
+
+    UEIENX = CFG_E;
+}
+
+void USB_interface_init(void) {
+    cli();
+
+    DDRD |= (1 << 5);
+    PORTD |= (1 << 5);
+    
+    DDRB |= (1 << 0);
+    PORTB |= (1 << 0);
+
+    UERST = 127;
+    UDCON |= (1 << DETACH);
+
+    UHWCON |= (1 << UVREGE);
+
+    PLLFRQ = 0b01001010;
+    PLLCSR = 0b00010010;
+    while(!(PLLCSR & (1 << PLOCK)));
+
+    USBCON = 0xB0;
+    UDCON = 1;
+    USBCON &= ~(1 << FRZCLK);
+
+    UDIEN = 0xC;
+    
+    UDCON &= ~(1 << DETACH);
+
+    sei();
 }
 
 ISR(USB_GEN_vect) {
@@ -187,7 +85,7 @@ ISR(USB_GEN_vect) {
         // clear resume information?
     }
     if (flags & (1 << EORSTI)) {
-        USB_interface_EPConfigure(0, EPDIR_OUT, EPTYPE_CONTROL, 64, EPBKTYPE_ONEBANK, (CFG_RXSTPE));
+        USB_interface_EPConfigure(0, EPDIR_OUT, EPTYPE_CONTROL, UD_EP0_SIZE, EPBKTYPE_ONEBANK, (CFG_RXSTPE));
         USB_interface_configStatus(USBFUNC_SETZERO);
         //PORTD &= ~(1 << 5);
     }
@@ -205,16 +103,16 @@ ISR(USB_GEN_vect) {
 }
 
 ISR(USB_COM_vect) {
-    //PORTD &= ~(1 << 5);
     uint8_t epint = UEINT;
     for (uint8_t i = 0; i < 7; i++) {
         if (epint & (1 << i)) {
             UENUM = i;
+            while (UENUM != i);
             uint8_t flags = UEINTX;
+            PORTB &= ~(1 << PB0);
 
-            if (flags & (1 << RXSTPI)) {
-                // read setup packet from UEDATX here first
-                UEINTX &= ~(1 << RXSTPI);
+            //UENUM = 0;    
+            if (UEINTX & (1 << RXSTPI)) {
                 //UEINTX &= ~(1 << RXSTPI);
                 // Setup packet 
                 volatile uint8_t bmRequestType = UEDATX;
@@ -226,9 +124,7 @@ ISR(USB_COM_vect) {
                 volatile uint16_t wLength = UEDATX;
                 wLength |= UEDATX << 8;
 
-                UEINTX &= ~((1 << RXSTPI) | (1 << RXOUTI) | (1 << TXINI)); // Clear UEINTX flags to handshake
-
-                PORTB ^= (1 << PB0);
+                USB_interface_handshakeSet(TYPE_RXSTPI); // TODO: why do we do this?
 
                 // send device descriptor
                 if (bRequest == GET_DESCRIPTOR) { // bmRequestType == 128 && ...
@@ -269,8 +165,6 @@ ISR(USB_COM_vect) {
                         default: // Unknown bDescriptorType
                             UECONX |= (1 << STALLRQ);
                             cli();
-                            //unknownPacket = 1;
-                            //SH1107_drawString(0, 15, 1, "STALL, unk wVal %u", wValue);
                             break;
                     }
                     descLen = requestLen > descLen ? descLen : requestLen;
@@ -280,27 +174,39 @@ ISR(USB_COM_vect) {
                         for (uint8_t i = 0; i < packetLen; i++) {
                             UEDATX = pgm_read_byte(descriptor + bytesSent++);
                         }
+
+                        if (bytesSent % UD_EP0_SIZE == 0 && bytesSent > 0) {
+                            while(!(UEINTX & (1 << TXINI)));
+                            USB_interface_handshakeSet(TYPE_TXINI); // ZLP
+                        }
+
                         descLen -= packetLen;
-                        UEINTX &= ~(1 << TXINI);
+                        USB_interface_handshakeSet(TYPE_TXINI);
                     }
+
+                    PORTB |= (1 << PB0);
                     return;
                 }
 
                 if (bRequest == SET_ADDRESS) {
-                    UEINTX &= ~(1 << TXINI); //handshake
+                    USB_interface_handshakeSet(TYPE_TXINI);
                     while(!(UEINTX & (1 << TXINI)));
                     UDADDR = wValue | (1 << ADDEN);
+                    PORTB |= (1 << PB0);
                     return;
                 }
-
+                
                 if (bRequest == SET_CONFIGURATION) {
                     if (bmRequestType == 0 && USB_interface_configStatus(USBFUNC_RETURN) == 0) {
-                        UEINTX &= ~(1 << TXINI); //handshake
-                    
-                        USB_interface_EPConfigure(1, EPDIR_IN, EPTYPE_INTERRUPT, 64, EPBKTYPE_ONEBANK, CFG_TXINE);
-                        UERST = 126;
+                        USB_interface_handshakeSet(TYPE_TXINI);
+                        USB_interface_EPConfigure(1, EPDIR_IN, EPTYPE_INTERRUPT, UD_EP0_SIZE, EPBKTYPE_ONEBANK, CFG_NONE);
+                        
+                        /*
+                        UERST = 0x7E; // 0b01111110
                         UERST = 0;
-                        USB_interface_configStatus(USBFUNC_SETONE);
+                        */
+                        
+                        PORTB |= (1 << PB0);
                         return;
                     }
                 }
@@ -311,32 +217,27 @@ ISR(USB_COM_vect) {
                     resend the previous packet. If 0, only send data
                     when there is a change (no resends).
                     */
-                    UEINTX &= ~(1 << TXINI);
+                    USB_interface_handshakeSet(TYPE_TXINI);
+                    PORTB |= (1 << PB0);
                     return;
                 }
 
                 if (bRequest == GET_REPORT) {
-                    if (wValue == 0x030F) {
-                        // Type: Feature, Report ID: (12)
-                        // This is the PID Pool Report
-                        while(!(UEINTX & (1 << TXINI)));
-                        for (uint8_t i = 0; i < wLength; i++) {
-                            UEDATX = pgm_read_byte(udPIDPoolReport + i);
-                        }
-                        UEINTX &= ~(1 << TXINI);
-                        return;
-                    }
-                }
+                    USB_interface_handshakeSet(TYPE_TXINI);
+                    PORTB |= (1 << PB0);
+                    return;
+                }   
             }
             if (flags & (1 << RXOUTI)) {
                 // read OUT data from UEDATX here first
                 UEINTX &= ~(1 << RXOUTI);
             }
-            if (flags & (1 << NAKINI))  UEINTX &= ~(1 << NAKINI);
-            if (flags & (1 << NAKOUTI)) UEINTX &= ~(1 << NAKOUTI);
-            if (flags & (1 << STALLEDI)) UEINTX &= ~(1 << STALLEDI);
+            if (flags & (1 << NAKINI)) { UEINTX &= ~(1 << NAKINI); }
+            if (flags & (1 << NAKOUTI)) { UEINTX &= ~(1 << NAKOUTI); }
+            if (flags & (1 << STALLEDI)) { UEINTX &= ~(1 << STALLEDI); }
             epint &= ~(1 << i);
-        }
-    }
-}
 
+            UECONX |= (1 << STALLRQ);
+        }
+    } 
+}

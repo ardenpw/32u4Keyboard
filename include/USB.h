@@ -21,10 +21,6 @@
 #define SET_PROTOCOL 0x0B
 
 #define UD_EP0_SIZE 0x40 // 64
-
-void usbInit(void);
-void prepUSBReport(void);
-void ep1RDY(void);
-void ep2Dump(void);
+#define UD_EP1_SIZE 0x40
 
 #endif //#ifndef USB_h
