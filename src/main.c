@@ -1,9 +1,9 @@
 #include <avr/io.h>
 
-#include "USB_driver.h"
+#include "USB_framework.h"
 
 int main(void) {
     USB_interface_init();
-    for(;;);
+    doMatrix();
     return 0;
 }

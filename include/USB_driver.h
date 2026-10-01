@@ -98,12 +98,20 @@ typedef enum {
     Clearing releases the ```setup-RXed``` state and halts stalling traffic on that pipe to proceed to the data/status stage
     - [send H->D (setup)], Cleared: After reading all 8 setup bytes from UEDATX
     */
-    TYPE_RXSTPI = 3
+    TYPE_RXSTPI = 3,
+    /*
+    For ```OUT``` or ```SETUP``` endpoints:
+    Set by hardware when current bank contains new ```out``` message, same time as ```RXOUT``` or ```RXSTP````
+    p
+    */
+   TYPE_FIFOCON = 7
 } USB_HS_TYPE;
 
 void USB_interface_init(void);
 //void USB_interface_powerOn(VBUS_ENUM VBUS_E);
 void USB_interface_EPConfigure(uint8_t epNum, EPDIR_ENUM EPDIR_E, EPTYPE_ENUM EPTYPE_E, uint16_t epSizeB, EPBK_ENUM EPBK_E, UEIENX_CFG_ENUM CFG_E); 
+void USB_interface_EPSend(uint8_t epNum, void* buf, uint8_t len);
+void USB_interface_EPRead(uint8_t epNum, uint8_t* buf);
 
 static inline uint8_t USB_interface_configStatus(USB_FUNCTION_RETURN_ENUM USBFUNC_E) {
     static uint8_t status = 0;
@@ -122,7 +130,7 @@ static inline uint8_t USB_interface_configStatus(USB_FUNCTION_RETURN_ENUM USBFUN
 
 static inline void USB_interface_handshakeSet(USB_HS_TYPE TYPE_E) {
     switch (TYPE_E) {
-        case 0: case 2: case 3:
+        case 0: case 2: case 3: case 7:
             UEINTX &= ~(1 << TYPE_E);
             break;
         default:

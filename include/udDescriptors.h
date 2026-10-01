@@ -3,7 +3,6 @@
 
 #include <avr/pgmspace.h>
 #include <stdint.h>
-//#include "global.h"
 
 static const uint8_t udDeviceDescriptor[] PROGMEM = {
     0x12, // bLength
@@ -22,19 +21,13 @@ static const uint8_t udDeviceDescriptor[] PROGMEM = {
     0x01 // num configurations
 };
 
-typedef struct udReport {
-    uint8_t reportID;
-    uint8_t modKeys;
-    uint8_t keys[6];
-};
-
 static const uint8_t udHIDReportDescriptor[] PROGMEM = { 
     // TODO: add LEDs
     0x05, 0x01, //  Usage Page: Generic Desktop
     0x09, 0x06, //  Usage: Joystick
     0xA1, 0x01, //  Collection: Application
     
-    0x85, 0x01, //      Report ID: (1)
+    //0x85, 0x00, //      Report ID: (1)
 
     0x05, 0x07, //      Usage Page: Keyboard
     0x19, 0xE0, //      Usage Minimum: Left Control
@@ -74,7 +67,7 @@ static const uint8_t udConfigurationDescriptor[] PROGMEM = {
     0x00, // no alternates
     0x01, // additional endpoints
     0x03, // HID device (yay! [bInterfaceClass]) 
-    0x00, // bInterfaceSubClass
+    0x01, // bInterfaceSubClass
     /*        TODO:
     0x01,  // bInterfaceSubClass - 1 (specified by USB-IF) is the constant for
            // the boot subclass - this keyboard can communicate with the BIOS,
@@ -82,8 +75,8 @@ static const uint8_t udConfigurationDescriptor[] PROGMEM = {
     0x01,  // bInterfaceProtocol - 0x01 (specified by USB-IF) is the protcol
            // code for keyboards
     */
-    0x00, // bInterfaceProtocol (defined in HID)
-    0x00, // iInterface
+    0x01, // bInterfaceProtocol
+    0x00, // iInterface TODO: string descriptor?
 
     // HID descriptor
     0x09, // bLength
